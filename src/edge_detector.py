@@ -1,7 +1,7 @@
 """Betano odds vs fair probabilities -> +EV candidates.
 
-Match winner: p = reference fair price (Pinnacle / consensus, Shin). Markov (box-score model) only
-             feeds the disagreement penalty in the stake.
+Match winner: p = reference fair price (Pinnacle / consensus, Shin). Markov (box-score model) is
+             only shown in the alert for context.
 Other markets: Markov with serve strengths fitted to the reference price (fit_to_price), so the
              relative strength comes from the market and the serve level (totals, tiebreaks)
              from SPW/RPW. Without a reference: raw Markov, only if require_reference is false
@@ -14,7 +14,7 @@ import yaml
 
 from src.db import ROOT
 from src.entity_resolver import resolve_tml
-from src.market import apply_daily_cap, edge, kelly_stake
+from src.market import edge, kelly_stake
 from src.markov import fit_to_price, match, over
 from src.serve_stats import serve_probs, surface_for
 
@@ -121,18 +121,15 @@ def detect(con, betano_rows: list[dict], reference: dict[str, dict],
             if pin is not None:
                 p, basis = pin, "Pinnacle"
                 thr = CFG["edge_min"][tr] + (0 if r["market"] == "match_winner" else CFG["pinnacle_secondary_extra"])
-                subs = [p, model_prob(m_raw, "match_winner", r["selection"], 0)] if m_raw and r["market"] == "match_winner" else []
                 stats["priced_by_pinnacle"] += 1
             elif (eid, r["market"]) in pin_markets:
                 continue
             elif r["market"] == "match_winner" and ref:
                 p, basis, thr = ref[r["selection"]], ref["source"], CFG["edge_min"][tr]
-                subs = [p, model_prob(m_raw, "match_winner", r["selection"], 0)] if m_raw else []
             elif m_fit and (ref or not CFG["require_reference"]):
                 p = model_prob(m_fit, r["market"], r["selection"], r["line"])
                 basis = f"markov+{ref['source']}" if ref else "markov"
                 thr = max(CFG["edge_min"][tr], CFG["markov_market"])
-                subs = []
             else:
                 continue
             if p is None:
@@ -143,7 +140,7 @@ def detect(con, betano_rows: list[dict], reference: dict[str, dict],
                 continue
             if e < thr:
                 continue
-            stake = kelly_stake(p, r["odd"], bankroll, subs, CFG["kelly_fraction"],
+            stake = kelly_stake(p, r["odd"], bankroll, CFG["kelly_fraction"],
                                 CFG["max_stake_pct"], CFG["stake_round_eur"],
                                 CFG["min_stake_eur"], CFG["min_stake_trigger_eur"])
             if stake <= 0:
@@ -160,8 +157,5 @@ def detect(con, betano_rows: list[dict], reference: dict[str, dict],
         k = (a["event_id"], "sets" if a["market"] in SET_MARKETS else a["market"])
         if k not in best or a["edge"] > best[k]["edge"]:
             best[k] = a
-    alerts = sorted(best.values(), key=lambda a: -a["edge"])
-    for a, s in zip(alerts, apply_daily_cap([a["stake"] for a in alerts], bankroll,
-                                            CFG["max_daily_pct"], CFG["stake_round_eur"])):
-        a["stake"] = s
-    return [a for a in alerts if a["stake"] > 0], dict(stats)
+    # best edge first: notify() fills the daily cap in this order
+    return sorted(best.values(), key=lambda a: -a["edge"]), dict(stats)

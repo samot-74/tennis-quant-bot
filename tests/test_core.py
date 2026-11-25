@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from src.market import apply_daily_cap, edge, kelly_stake, shin_probs
+from src.market import edge, kelly_stake, shin_probs
 from src.markov import game, match, over, set_dist, tiebreak
 
 
@@ -17,8 +17,6 @@ def test_kelly_caps_and_rounds():
     assert kelly_stake(0.40, 2.0, 1000) == 0  # negative edge
     assert kelly_stake(0.60, 2.0, 1000, round_to=5) == 25  # 0.25*0.2=5% -> capped at 2.5%
     assert kelly_stake(0.53, 2.0, 1000, round_to=5) == 15  # 1.5% = 15
-    assert kelly_stake(0.53, 2.0, 1000, sub_probs=[0.45, 0.6, 0.55], round_to=5) % 5 == 0
-    assert sum(apply_daily_cap([25] * 8, 1000)) <= 100
     # 100 EUR bankroll, 1 EUR steps
     assert kelly_stake(0.60, 2.0, 100) == 2      # cap 2.50 -> 2
     assert kelly_stake(0.53, 2.0, 100) == 1      # 1.50 -> 1
@@ -101,3 +99,19 @@ def test_set_markets_derived_from_pinnacle_set_handicap():
     # best of 5 (men's slam): -1.5 sets is not a 3-0, so nothing is derived
     slam = [{**r, "region": "Wimbledon Men Singles"} for r in rows]
     assert ("e", "correct_score", "2:0") not in sharp_probs(slam)[0]
+
+
+def test_daily_cap_fills_best_edges_first(monkeypatch, tmp_path):
+    # 11 one-euro alerts vs a 10 EUR cap: the 10 best go out, not zero (old proportional scaling floored all to 0)
+    from datetime import datetime
+    from src import telegram_notifier
+    from src.db import connect
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(telegram_notifier, "send", lambda text: True)
+    con = connect(tmp_path / "t.duckdb")
+    alerts = [{"event_id": f"e{i}", "market": "match_winner", "selection": "p1", "line": 0.0, "odd": 2.0,
+               "edge": 0.10 - i / 100, "stake": 1.0, "player1": "A", "player2": "B", "region": "", "tournament": "",
+               "tier": "tier1", "kickoff": datetime(2026, 1, 1), "fair_odd": 1.8, "min_odd": 1.9, "p_model": 0.55,
+               "basis": "Pinnacle"} for i in range(11)]
+    assert telegram_notifier.notify(con, alerts, bankroll=100) == 10
+    assert con.execute("SELECT count(*) FROM sent_alerts WHERE match_id = 'e10'").fetchone()[0] == 0

@@ -1,9 +1,9 @@
-# Minimum edge per tier (fraction). Tier 3 also requires steam confirmation.
+# Minimum edge vs Pinnacle fair, per tier (fraction). Kept equal: Pinnacle is sharpest on the big
+# tours, so an edge measured there is at least as reliable as on a Challenger.
 edge_min:
-  tier1: 0.035   # Challenger, WTA 125/250, ATP 250, qualifying
-  tier2: 0.050   # 500s and Masters R1/R2
-  tier3: 0.075   # Grand Slam main draw
-  stat_market: 0.070   # aces / double faults (no Pinnacle reference)
+  tier1: 0.035   # Challenger, WTA 125, ITF, qualifying
+  tier2: 0.035   # ATP/WTA main tour (OddsPapi doesn't say 250 vs Masters)
+  tier3: 0.035   # Grand Slam
 kelly_fraction: 0.25
 max_stake_pct: 0.025
 max_daily_pct: 0.10

@@ -1,6 +1,5 @@
-"""Vig removal (Shin), edge, and penalised fractional Kelly staking."""
+"""Vig removal (Shin), edge, and fractional Kelly staking."""
 import math
-from statistics import pstdev
 
 
 def shin_probs(odds: list[float], tol: float = 1e-12) -> list[float]:
@@ -30,28 +29,19 @@ def edge(p_model: float, odd: float) -> float:
     return p_model * odd - 1
 
 
-def kelly_stake(p: float, odd: float, bankroll: float, sub_probs: list[float] = (),
+def kelly_stake(p: float, odd: float, bankroll: float,
                 fraction: float = 0.25, max_pct: float = 0.025, round_to: float = 1,
                 min_stake: float = 1, min_trigger: float = 0.5) -> float:
-    """Fractional Kelly, shrunk by sub-model disagreement, capped, rounded DOWN to `round_to` EUR.
+    """Fractional Kelly, capped, rounded DOWN to `round_to` EUR.
 
     Anything from `min_trigger` up to the first rounding step becomes `min_stake` (small bankrolls).
+    The daily cap is applied when sending (telegram_notifier.notify), best edge first.
     """
     b = odd - 1
     f = (b * p - (1 - p)) / b
     if f <= 0:
         return 0.0
-    agree = max(0.2, 1 - 2 * pstdev(sub_probs)) if len(sub_probs) > 1 else 1.0
-    stake = min(fraction * f * agree, max_pct) * bankroll
+    stake = min(fraction * f, max_pct) * bankroll
     if stake < min_trigger:
         return 0.0
     return max(min_stake, math.floor(stake / round_to + 1e-9) * round_to)
-
-
-def apply_daily_cap(stakes: list[float], bankroll: float, max_daily_pct: float = 0.10,
-                    round_to: float = 1) -> list[float]:
-    """Scale today's stakes down proportionally if total exceeds the daily exposure cap."""
-    total, cap = sum(stakes), max_daily_pct * bankroll
-    if total <= cap:
-        return stakes
-    return [math.floor(s * cap / total / round_to + 1e-9) * round_to for s in stakes]
