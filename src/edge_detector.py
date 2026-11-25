@@ -19,6 +19,7 @@ from src.markov import fit_to_price, match, over
 from src.serve_stats import serve_probs, surface_for
 
 CFG = yaml.safe_load((ROOT / "config" / "settings.yaml").read_text())
+SET_MARKETS = ("set_handicap", "correct_score", "both_win_set", "p1_win_set", "p2_win_set")
 SLAMS = ("open da austr", "australian open", "roland garros", "french open", "wimbledon", "us open")
 
 
@@ -152,10 +153,11 @@ def detect(con, betano_rows: list[dict], reference: dict[str, dict],
                                "match_winner": m_raw["match_winner"], "pa": sp["pa"], "pb": sp["pb"],
                                "surface": sp["surface"], "n": (sp["n_a"], sp["n_b"])}})
 
-    # one bet per (event, market): Over 20.5 / 21.5 / 22.5 are the same bet, keep the best edge
+    # one bet per (event, market): Over 20.5 / 21.5 / 22.5 are the same bet, keep the best edge.
+    # The set markets are all one bet on the set score (2-0 = handicap -1.5 = "other player wins no set").
     best = {}
     for a in alerts:
-        k = (a["event_id"], a["market"])
+        k = (a["event_id"], "sets" if a["market"] in SET_MARKETS else a["market"])
         if k not in best or a["edge"] > best[k]["edge"]:
             best[k] = a
     alerts = sorted(best.values(), key=lambda a: -a["edge"])

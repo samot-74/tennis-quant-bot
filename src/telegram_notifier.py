@@ -17,11 +17,17 @@ MARKET_PT = {"match_winner": "Vencedor", "total_games": "Total de Jogos", "game_
              "set_handicap": "Handicap de Sets", "set1_winner": "Vencedor 1.º Set",
              "set1_total_games": "Total de Jogos 1.º Set", "player1_games": "Jogos ganhos",
              "player2_games": "Jogos ganhos", "tiebreak_in_match": "Tie-break no jogo",
-             "set1_tiebreak": "Tie-break 1.º Set"}
+             "set1_tiebreak": "Tie-break 1.º Set", "correct_score": "Resultado Correto",
+             "both_win_set": "Ambos os jogadores ganharão um set", "p1_win_set": "Ganhar um set",
+             "p2_win_set": "Ganhar um set"}
 
 
 def selection_label(a: dict) -> str:
     sel, line = a["selection"], a["line"]
+    if a["market"] == "correct_score":
+        return f"{sel} ({a['player1']} – {a['player2']})"
+    if a["market"] in ("p1_win_set", "p2_win_set"):
+        return f"{a['player1'] if a['market'] == 'p1_win_set' else a['player2']}: {'Sim' if sel == 'yes' else 'Não'}"
     if sel in ("p1", "p2"):
         name = a["player1"] if sel == "p1" else a["player2"]
         return f"{name} {line:+g}" if a["market"].endswith("handicap") else name

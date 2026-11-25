@@ -166,6 +166,8 @@ def test_oddspapi_normalise_and_sharp():
     eid = bet[0]["event_id"]
     assert ref[eid]["p1"] + ref[eid]["p2"] == pytest.approx(1) and ref[eid]["p1"] > 0.7
     for (e, mid, sel), p in sharp.items():
+        if mid == "correct_score":  # 4-way, checked in test_core
+            continue
         other = {"p1": "p2", "p2": "p1", "over": "under", "under": "over", "yes": "no", "no": "yes"}[sel]
         assert p + sharp[(e, mid, other)] == pytest.approx(1)
 

@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 import requests
 
 from src.db import ROOT
-from src.edge_detector import CFG
+from src.edge_detector import CFG, best_of
 
 BASE = "https://api.oddspapi.io/v4"
 CATALOGUE = ROOT / "config" / "oddspapi_markets.json"  # versioned: saves 1 request per cloud run
@@ -23,8 +23,13 @@ MARKETS = {("moneyline", "result"): "match_winner", ("totals-games", "result"): 
            ("spreads-games", "result"): "game_handicap", ("spreads", "result"): "set_handicap",
            ("teamtotals-games-team1", "result"): "player1_games",
            ("teamtotals-games-team2", "result"): "player2_games",
-           ("totals-games", "p1"): "set1_total_games", ("moneyline", "p1"): "set1_winner"}
-SELECTION = {"1": "p1", "2": "p2", "Over": "over", "Under": "under", "Yes": "yes", "No": "no"}
+           ("totals-games", "p1"): "set1_total_games", ("moneyline", "p1"): "set1_winner",
+           # Pinnacle doesn't list these; their fair price is derived from its set handicap (see sharp_probs)
+           ("correctscore", "result"): "correct_score", ("bothwinset", "result"): "both_win_set",
+           ("winaset-team1", "result"): "p1_win_set", ("winaset-team2", "result"): "p2_win_set"}
+DERIVED = ("correct_score", "both_win_set", "p1_win_set", "p2_win_set")
+SELECTION = {"1": "p1", "2": "p2", "Over": "over", "Under": "under", "Yes": "yes", "No": "no",
+             **{s: s for s in ("2:0", "2:1", "1:2", "0:2")}}
 
 
 class BudgetExceeded(RuntimeError):
@@ -100,7 +105,7 @@ def normalise(odds: list[dict], fixtures: dict[str, dict], book: str, cat: dict[
                     continue
                 line = d["handicap"] if sel != "p2" or not key.endswith("handicap") else -d["handicap"]
                 rows.append({**ev, "market": key, "selection": sel, "line": float(line), "odd": float(pr["price"]),
-                             "market_id": mid})
+                             "market_id": key if key in DERIVED else mid})
     return rows
 
 
@@ -137,18 +142,36 @@ def fetch(con, hours: float, tournaments: list[int] | None = None) -> tuple[list
 
 
 def sharp_probs(pin_rows: list[dict]) -> tuple[dict, dict]:
-    """Pinnacle rows -> ({(event, market_id, selection): fair p}, {event: winner ref}) via Shin per market."""
+    """Pinnacle rows -> ({(event, market_id, selection): fair p}, {event: winner ref}) via Shin per market.
+
+    Best of 3 only: set handicap -1.5 is exactly a 2-0, so correct score / win a set / both win a set
+    follow from it and the winner price (keyed by the DERIVED market names normalise() uses as ids).
+    """
     from src.market import shin_probs
 
     groups = {}
     for r in pin_rows:
         groups.setdefault((r["event_id"], r["market_id"]), []).append(r)
-    sharp, ref = {}, {}
+    sharp, ref, two_nil, bo = {}, {}, {}, {}
     for (eid, mid), rs in groups.items():
         if len(rs) != 2:
             continue
         for r, p in zip(rs, shin_probs([r["odd"] for r in rs])):
             sharp[(eid, mid, r["selection"])] = p
+            bo[eid] = best_of(r["region"], r["tournament"])
             if r["market"] == "match_winner":
                 ref.setdefault(eid, {"source": "Pinnacle"})[r["selection"]] = p
-    return sharp, {e: v for e, v in ref.items() if "p1" in v and "p2" in v}
+            if r["market"] == "set_handicap" and r["line"] == -1.5:
+                two_nil.setdefault(eid, {})[r["selection"]] = p
+    ref = {e: v for e, v in ref.items() if "p1" in v and "p2" in v}
+    for eid, t in two_nil.items():
+        if eid not in ref or bo[eid] != 3 or len(t) != 2:
+            continue
+        w, p20, p02 = ref[eid]["p1"], t["p1"], t["p2"]
+        derived = {("correct_score", "2:0"): p20, ("correct_score", "0:2"): p02,
+                   ("correct_score", "2:1"): w - p20, ("correct_score", "1:2"): 1 - w - p02,
+                   ("both_win_set", "yes"): 1 - p20 - p02, ("both_win_set", "no"): p20 + p02,
+                   ("p1_win_set", "yes"): 1 - p02, ("p1_win_set", "no"): p02,
+                   ("p2_win_set", "yes"): 1 - p20, ("p2_win_set", "no"): p20}
+        sharp.update({(eid, m, s): p for (m, s), p in derived.items() if p > 0.01})
+    return sharp, ref

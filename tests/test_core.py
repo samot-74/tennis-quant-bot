@@ -81,3 +81,23 @@ def test_against_monte_carlo():
 def test_set_dist_scores_valid():
     for (a, b) in set_dist(0.6, 0.6):
         assert (max(a, b) == 6 and abs(a - b) >= 2) or {a, b} in ({7, 5}, {7, 6})
+
+
+def test_set_markets_derived_from_pinnacle_set_handicap():
+    from src.oddspapi import sharp_probs
+    ev = {"event_id": "e", "region": "ATP Challenger X Men Singles", "tournament": ""}
+    rows = [{**ev, "market": "match_winner", "market_id": "w", "selection": s, "line": 0.0, "odd": 1.5 if s == "p1" else 2.5}
+            for s in ("p1", "p2")]
+    rows += [{**ev, "market": "set_handicap", "market_id": "h-", "selection": "p1", "line": -1.5, "odd": 2.2},
+             {**ev, "market": "set_handicap", "market_id": "h-", "selection": "p2", "line": 1.5, "odd": 1.65},
+             {**ev, "market": "set_handicap", "market_id": "h+", "selection": "p1", "line": 1.5, "odd": 1.15},
+             {**ev, "market": "set_handicap", "market_id": "h+", "selection": "p2", "line": -1.5, "odd": 5.5}]
+    sharp, ref = sharp_probs(rows)
+    cs = [sharp[("e", "correct_score", s)] for s in ("2:0", "2:1", "1:2", "0:2")]
+    assert sum(cs) == pytest.approx(1)
+    assert cs[0] + cs[1] == pytest.approx(ref["e"]["p1"])
+    assert sharp[("e", "both_win_set", "yes")] == pytest.approx(cs[1] + cs[2])
+    assert sharp[("e", "p2_win_set", "no")] == sharp[("e", "h-", "p1")]
+    # best of 5 (men's slam): -1.5 sets is not a 3-0, so nothing is derived
+    slam = [{**r, "region": "Wimbledon Men Singles"} for r in rows]
+    assert ("e", "correct_score", "2:0") not in sharp_probs(slam)[0]
