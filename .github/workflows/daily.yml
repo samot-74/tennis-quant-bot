@@ -1,18 +1,35 @@
-# Daily send to Telegram: Betano.pt vs Pinnacle (OddsPapi), 07:00 UTC.
-# Lisbon is UTC+0 in winter (07:00) and UTC+1 in summer (08:00): move the cron to "0 6 * * *" end of March.
+# Daily send to Telegram: Betano.pt vs Pinnacle (OddsPapi), ~07:00 Lisbon (UTC+0 in winter).
+# Summer (UTC+1, end of March): move both crons one hour earlier.
 # Secrets (repo Settings > Secrets and variables > Actions): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
 # ODDSPAPI_KEY, BANKROLL_EUR.
 name: daily
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # GitHub may start it a few minutes late; first matches are at 08:00 Lisbon
+    # GitHub's cron is best effort and drops runs, worst at :00. Two off-peak tries; the gate
+    # below makes the second one a no-op if the first already sent. First matches are 08:00 Lisbon.
+    - cron: "53 6 * * *"
+    - cron: "23 7 * * *"
   workflow_dispatch:      # "Run workflow" button for a manual send
 
 concurrency: daily        # never two sends at once
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions: { actions: read }
+    outputs:
+      sent: ${{ steps.c.outputs.sent }}
+    steps:
+      - id: c
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          n=$(gh run list -R "$GITHUB_REPOSITORY" -w daily -s success -e schedule --created "$(date -u +%F)" --json databaseId -q length)
+          echo "sent=$n" >> "$GITHUB_OUTPUT"
+
   send:
+    needs: gate
+    if: github.event_name != 'schedule' || needs.gate.outputs.sent == '0'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
