@@ -24,8 +24,10 @@ def main(run_tag: str = "T1", tournaments: list[int] | None = None):
     used = con.execute("SELECT count(*) FROM api_usage WHERE provider='oddspapi' AND status < 400 AND ts >= date_trunc('month', now())").fetchone()[0]
     print(f"Betano.pt: {len(betano)} odds · Pinnacle: {len(pinnacle)} odds · {info} · "
           f"OddsPapi {used}/{CFG['oddspapi']['monthly_budget']} requests this month")
-    if not betano:
-        sys.exit("no Betano.pt odds for target matches")
+    if not betano:  # quiet day (no target matches): say so, not an error
+        notify(con, [], summary=True)
+        print("no Betano.pt odds for target matches")
+        return
     betano_scraper.save(betano, run_tag)
     sharp, ref = oddspapi.sharp_probs(pinnacle)
     ts = datetime.now(timezone.utc)

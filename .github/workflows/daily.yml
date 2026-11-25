@@ -1,0 +1,54 @@
+# Daily send to Telegram: Betano.pt vs Pinnacle (OddsPapi), 07:00 UTC.
+# Lisbon is UTC+0 in winter (07:00) and UTC+1 in summer (08:00): move the cron to "0 6 * * *" end of March.
+# Secrets (repo Settings > Secrets and variables > Actions): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+# ODDSPAPI_KEY, BANKROLL_EUR.
+name: daily
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # GitHub may start it a few minutes late; first matches are at 08:00 Lisbon
+  workflow_dispatch:      # "Run workflow" button for a manual send
+
+concurrency: daily        # never two sends at once
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - run: python -X utf8 -m pytest -q tests
+
+      # data/ (DuckDB with sent alerts + OddsPapi request counter, TML CSVs) carries over between runs
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+
+      - name: Update TennisMyLife history
+        run: python -X utf8 -m src.historical_loader
+
+      - name: Compare odds and send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
+          BANKROLL_EUR: ${{ secrets.BANKROLL_EUR }}
+        run: |
+          : "${TELEGRAM_BOT_TOKEN:?secret missing}" "${TELEGRAM_CHAT_ID:?secret missing}" "${ODDSPAPI_KEY:?secret missing}" "${BANKROLL_EUR:?secret missing}"
+          python -X utf8 -m src.pipeline T2
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: data-${{ github.run_id }}

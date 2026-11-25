@@ -16,7 +16,7 @@ from src.db import ROOT
 from src.edge_detector import CFG
 
 BASE = "https://api.oddspapi.io/v4"
-CATALOGUE = ROOT / "data" / "raw" / "oddspapi" / "markets.json"
+CATALOGUE = ROOT / "config" / "oddspapi_markets.json"  # versioned: saves 1 request per cloud run
 
 # (marketType, period) -> our market key. Handicap lines are player1's line on outcome "1".
 MARKETS = {("moneyline", "result"): "match_winner", ("totals-games", "result"): "total_games",
@@ -54,10 +54,11 @@ def _get(con, path: str, **params):
 
 
 def catalogue(con) -> dict[str, dict]:
-    """marketId -> market definition (fetched once, ~1.6 MB, cached on disk)."""
+    """marketId -> market definition for the markets we map (fetched once if the file is missing)."""
     if not CATALOGUE.exists():
         CATALOGUE.parent.mkdir(parents=True, exist_ok=True)
-        CATALOGUE.write_text(json.dumps(_get(con, "/markets", sportId=12)), encoding="utf-8")
+        CATALOGUE.write_text(json.dumps([m for m in _get(con, "/markets", sportId=12)
+                                         if (m["marketType"], m["period"]) in MARKETS]), encoding="utf-8")
     return {str(m["marketId"]): m for m in json.loads(CATALOGUE.read_text(encoding="utf-8"))}
 
 

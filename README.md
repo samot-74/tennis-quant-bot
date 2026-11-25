@@ -24,14 +24,21 @@ python -X utf8 -m pytest -q
 Free OddsPapi tier: 250 requests/month; a run costs 1 + 2 × ceil(tournaments / 5) ≈ 5, so one daily send ≈ 5–7 requests (≈150–210/month).
 The PC must be on and you logged in at run time; missed runs start when it wakes, but alerts for matches already started are skipped.
 
-## Daily send (07:15)
+## Daily send (GitHub Actions, 07:00 UTC)
 
-One send a day, when you place every bet: 07:15 Lisbon is before the first European Challenger matches
-(10:00 local in Greece/Turkey = 08:00 Lisbon) and covers Europe + the Americas (~85% of the day).
-Overnight Asia/Australia is usually not scheduled yet at that hour. Each alert says the minimum odd:
-if Betano has dropped below it by the time you bet, skip it. Windows task (PowerShell, once):
+`.github/workflows/daily.yml` runs every day in GitHub's cloud (PC can be off): tests, TennisMyLife update,
+OddsPapi comparison, Telegram. `data/` (sent alerts, OddsPapi request counter, TML files) is kept between
+runs with the Actions cache. Manual send: Actions > daily > Run workflow.
+
+07:00 UTC = 07:00 Lisbon in winter, before the first European Challenger matches (08:00 Lisbon) and covering
+Europe + the Americas (~85% of the day). In summer (UTC+1) change the cron to `0 6 * * *`.
+Each alert says the minimum odd: if Betano has dropped below it by the time you bet, skip it.
+
+Secrets (set them yourself, values are prompted and never shown):
 
 ```powershell
-$a = New-ScheduledTaskAction -Execute powershell.exe -Argument '-NoProfile -ExecutionPolicy Bypass -File "<project>\scripts\run_pipeline.ps1" pipeline T1' -WorkingDirectory "<project>"
-Register-ScheduledTask -TaskPath '\tennis-quant-bot\' -TaskName daily -Action $a -Trigger (New-ScheduledTaskTrigger -Daily -At 07:15) -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable) -Force
+gh secret set TELEGRAM_BOT_TOKEN -R samot-74/tennis-quant-bot
+gh secret set TELEGRAM_CHAT_ID -R samot-74/tennis-quant-bot
+gh secret set ODDSPAPI_KEY -R samot-74/tennis-quant-bot
+gh secret set BANKROLL_EUR -R samot-74/tennis-quant-bot
 ```
