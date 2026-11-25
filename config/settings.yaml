@@ -1,0 +1,28 @@
+# Minimum edge per tier (fraction). Tier 3 also requires steam confirmation.
+edge_min:
+  tier1: 0.035   # Challenger, WTA 125/250, ATP 250, qualifying
+  tier2: 0.050   # 500s and Masters R1/R2
+  tier3: 0.075   # Grand Slam main draw
+  stat_market: 0.070   # aces / double faults (no Pinnacle reference)
+kelly_fraction: 0.25
+max_stake_pct: 0.025
+max_daily_pct: 0.10
+stake_round_eur: 1
+min_stake_eur: 1        # any Kelly stake >= 0.50 EUR is bumped to this
+min_stake_trigger_eur: 0.5
+realert_edge_jump: 0.02
+history:
+  first_year: 2015
+  tours: [atp, challenger, wta, atp_quali]
+markov_market: 0.06      # min edge for markets priced only by the Markov model
+max_edge: 0.25           # larger edges are almost always a mapping/stale-odds error -> skip
+odds_range: [1.25, 6.0]
+require_reference: true  # false = also alert on raw Markov prices for events OddsPortal didn't pair
+deep_scan_tours: [challenger, itf, wta, "125", quali]   # phase B always for these
+deep_scan_min_edge: -0.02  # ...and for any event whose Betano Vencedor is within 2% of fair or better
+window_hours: 24           # one daily send (07:15) covers everything starting in the next 24 h
+pinnacle_secondary_extra: 0.01   # extra edge required on non-winner markets priced by Pinnacle
+oddspapi:
+  monthly_budget: 240      # free tier is 250 requests/month; the run stops before going over
+  tour_prefixes: [ATP, WTA]  # OddsPapi tournament names; ITF/UTR/exhibitions have no prefix
+daily_send_at: "07:15"    # before the first European matches (08:00 Lisbon); see README
